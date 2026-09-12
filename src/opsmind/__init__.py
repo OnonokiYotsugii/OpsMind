@@ -1,0 +1,1 @@
+"""OpsMind equipment maintenance application."""
