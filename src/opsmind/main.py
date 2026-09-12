@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
+from opsmind.api.analysis import router as analysis_router
 from opsmind.api.errors import install_error_handlers
 from opsmind.api.routes import router
 from opsmind.core.config import Settings
@@ -42,4 +43,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     install_error_handlers(app)
     app.include_router(router)
+    app.include_router(analysis_router)
     return app

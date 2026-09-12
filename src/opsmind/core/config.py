@@ -1,8 +1,9 @@
 """Validated environment settings; credentials never appear in repr."""
 
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     environment: Literal["development", "test", "production"] = "development"
@@ -20,3 +22,27 @@ class Settings(BaseSettings):
     migration_database_url: SecretStr = SecretStr("")
     test_database_url: SecretStr = SecretStr("")
     demo_employee_no: str = Field(default="EMP-1001", pattern=r"^[A-Z0-9_-]{1,64}$")
+
+    llm_provider: Literal["deepseek", "openai_compatible"] = "deepseek"
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = Field(default="deepseek-v4-pro", pattern=r"^[A-Za-z0-9._:/-]{1,128}$")
+    llm_api_key: SecretStr = SecretStr("")
+    llm_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    llm_total_timeout_seconds: float = Field(default=60, gt=0, le=180)
+    llm_max_retries: int = Field(default=1, ge=0, le=3)
+    llm_max_output_tokens: int = Field(default=1500, ge=128, le=8192)
+
+    @field_validator("llm_base_url")
+    @classmethod
+    def validate_llm_url(cls, value: str) -> str:
+        parts = urlsplit(value)
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError("Use an HTTPS base URL without credentials, query or fragment.")
+        return value.rstrip("/")

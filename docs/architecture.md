@@ -1,8 +1,8 @@
 # 架构设计
 
-## P1 已实现
+## P2 当前实现
 
-已实现配置、日志、FastAPI 工厂、业务服务、输入/输出模型、SQLAlchemy 数据访问与 MySQL 迁移。Settings 实例化时读取环境，导入模块无数据库连接副作用。P1 仅本机演示，未实现 LLM、Agent 或 RAG。
+已实现配置、日志、FastAPI 工厂、业务服务、输入/输出模型、SQLAlchemy 数据访问与 MySQL 迁移。Settings 实例化时读取环境，导入模块无数据库连接副作用。保留本机演示限制，新增 P2 单次模型分析接口；未实现 Agent 或 RAG。
 
 ## 逐步演进的分层
 
@@ -37,3 +37,14 @@ P5 把已有审批语义迁移到 LangGraph 的状态和检查点。P1 的手动
 数据库事务由业务服务控制。网络重试限于可安全重试的操作，创建工单需要幂等保护；模型调用不能无限重试。Agent 设置最大步骤、工具白名单与结果长度限制。敏感数据按需读取，禁止任意 SQL 或 Shell 工具。
 
 当前使用普通事件日志；请求 ID、Agent run ID、工具耗时在对应调用链落地时增加，P6 汇总为 Trace 和评估指标。
+
+## P2 模型分析路径
+
+POST /api/v1/analyses → AnalysisRequest → analyze_description → JSONClient →
+Chat Completions HTTP → 协议解析 → FaultAnalysis → AnalysisResponse。
+
+这条路径不经过业务数据库。配置与供应商参数位于 llm 层；Prompt 单独管理。
+DeepSeek 使用 deepseek-v4-pro 和 JSON Output，再以 Pydantic 校验字段。
+模型输出是初步分析，不是已验证诊断，needs_human_review 也不是执行授权。
+
+当前自动测试包含真实 MySQL 回归和模拟模型 HTTP；真实模型连接状态见 P2 报告。

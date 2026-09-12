@@ -2,7 +2,7 @@
 
 企业设备智能运维工单 Agent 学习与求职项目，按阶段构建。
 
-**当前阶段：P1 基础业务后端。** 已实现设备查询、维修历史、工单历史、创建和更新工单。尚未实现 LLM、Agent 或 RAG。
+**当前阶段：P2 模型调用与结构化输出。** 保留 P1 工单后端，新增故障描述分析接口。P2 代码、105 项自动测试及一次真实 DeepSeek 结构化输出验证已完成；详情见 P2 报告。尚未实现 Agent 或 RAG。
 
 最终目标：结合业务数据和知识库诊断设备故障，经人工确认后创建或修改工单。当前 P1 先建立不带 AI 的可靠业务基础。
 
@@ -23,10 +23,15 @@ uv sync --locked --cache-dir .uv-cache
 
 浏览器打开 [接口文档](http://127.0.0.1:8000/docs)，查询 `EQ-10023`。完整的新手步骤见 [P1 操作教程](docs/p1-guide.md)。
 
+## P2 模型分析
+
+新增 POST /api/v1/analyses，只分析用户输入，不查询数据库或写入工单。用户选择 DeepSeek deepseek-v4-pro；密钥存本机 .env。配置、真实调用验证和错误说明见 [P2 操作教程](docs/p2-guide.md)。
+
 ## 已实现接口
 
 | 方法与路径 | 功能 |
 | --- | --- |
+| POST /api/v1/analyses | 模型初步分析（不写工单） |
 | GET /health | 进程健康检查，不代表数据库连接正常 |
 | GET /api/v1/equipment/{equipment_no} | 设备基本信息 |
 | GET /api/v1/equipment/{equipment_no}/maintenance-records | 维修历史 |
@@ -50,7 +55,7 @@ P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP
 .\.venv\Scripts\alembic.exe check
 ```
 
-完整测试在本机已通过 44 项。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
+完整测试在本机已通过 105 项，其中 61 项为新增 P2 自动测试。模型 HTTP 使用模拟传输；真实模型检查单独运行，不计入自动测试。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
 
 锁定的 Starlette TestClient 对 httpx 及 AnyIO 的兼容接口产生两条上游弃用提示，当前测试仍通过；未隐藏警告。后续升级测试客户端时处理，不影响本阶段接口功能。
 
@@ -78,7 +83,8 @@ docs/              架构、决策和学习说明
 | SQLAlchemy | ORM 与事务 |
 | PyMySQL[rsa] | MySQL 驱动及认证所需的 RSA 支持 |
 | Alembic | 表结构迁移 |
-| pytest / httpx | 自动化测试及 HTTP 测试客户端 |
+| httpx | 模型 HTTP 调用与 HTTP 测试传输 |
+| pytest | 自动化测试 |
 | Ruff | 代码检查与格式化 |
 | Hatchling | src 布局包的构建与安装 |
 
@@ -86,6 +92,6 @@ docs/              架构、决策和学习说明
 
 ## 阶段规划
 
-P0 工程基础 → **P1 业务后端** → P2 模型客户端 → P3 手写 Agent 与工具审批 → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
+P0 工程基础 → P1 业务后端 → **P2 模型客户端** → P3 手写 Agent 与工具审批 → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
 
-每阶段验收后暂停。详见 [项目要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[P1 报告](docs/p1-report.md)、[学习与作品证据](docs/learning.md)。
+每阶段验收后暂停。详见 [项目要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[P1 报告](docs/p1-report.md)、[学习与作品证据](docs/learning.md)、[P2 报告](docs/p2-report.md)。

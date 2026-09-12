@@ -8,11 +8,20 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
 from opsmind.core.errors import BusinessError
+from opsmind.llm.errors import LLMError
 
 logger = logging.getLogger("opsmind.api")
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(LLMError)
+    async def llm_error(_request: Request, exc: LLMError) -> JSONResponse:
+        logger.warning("model_request_failed code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"code": exc.code, "message": exc.message}},
+        )
+
     @app.exception_handler(BusinessError)
     async def business_error(_request: Request, exc: BusinessError) -> JSONResponse:
         return JSONResponse(
