@@ -1,58 +1,91 @@
 # OpsMind
 
-企业设备智能运维工单 Agent，作为 Python 后端与大模型应用开发的学习及求职项目，按阶段构建。
+企业设备智能运维工单 Agent 学习与求职项目，按阶段构建。
 
-**当前阶段：P0 工程基础。尚无业务 API、数据库表或 AI 功能。** 不将规划中的能力写成已经实现的成果。
+**当前阶段：P1 基础业务后端。** 已实现设备查询、维修历史、工单历史、创建和更新工单。尚未实现 LLM、Agent 或 RAG。
 
-最终场景：输入设备编号和故障描述，结合设备信息、维修历史、工单及知识库提出有依据的诊断；写操作必须经过人工确认。
+最终目标：结合业务数据和知识库诊断设备故障，经人工确认后创建或修改工单。当前 P1 先建立不带 AI 的可靠业务基础。
 
-## 本地开始
+## 快速开始（Windows / PowerShell）
 
-需要 Python 3.13、uv 和 Git。MySQL 8 在 P1 才需要启动和配置。
-
-在项目根目录用 PowerShell 执行：
+需要 Python 3.13、uv、Git、已启动的 MySQL 8（CHECK 约束要求 8.0.16+）。所有命令在项目根目录运行；PyCharm 选择已有解释器 `.venv/Scripts/python.exe`。
 
 ```powershell
-uv sync --locked
-Copy-Item .env.example .env
-uv run python -c "from opsmind.core.config import Settings; from opsmind.core.logging import configure_logging; configure_logging(Settings()).info('configuration ready')"
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
+uv sync --locked --cache-dir .uv-cache
+# 仅首次配置：本机交互输入管理员密码，创建独立库与专用账号。
+.\.venv\Scripts\python.exe scripts/setup_local_mysql.py
+.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\python.exe scripts/seed_demo.py
+.\.venv\Scripts\python.exe -m uvicorn opsmind.main:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-仅在首次配置时复制 `.env`，避免覆盖已有配置。uv 创建项目独立 `.venv`；无需修改 Anaconda 全局环境。若系统 uv 缓存不可写，可在命令中加入 `--cache-dir .uv-cache`。需要联网下载依赖；已锁定版本见 `uv.lock`。
+已配置数据库的机器跳过 setup_local_mysql.py。它不覆盖已有连接配置；若指定库已有表，会停止保护现有数据。脚本只保存生成的应用账号连接串，不保存管理员密码。手动配置可参考 `.env.example`，不要覆盖已有 `.env`。
 
-## 工程约定
+浏览器打开 [接口文档](http://127.0.0.1:8000/docs)，查询 `EQ-10023`。完整的新手步骤见 [P1 操作教程](docs/p1-guide.md)。
 
-- 使用 `src` 布局，通过安装包导入，避免依赖当前目录偶然导入成功。
-- 配置入口：`src/opsmind/core/config.py`。环境变量优先于根目录 `.env`，再使用默认值。
-- 日志入口：`src/opsmind/core/logging.py`。由未来应用启动时显式配置，输出 UTC 时间到 stderr。
-- 密码使用 `SecretStr` 避免意外打印，但禁止主动解密后写日志；不记录原始请求、Prompt 或数据库连接串。
-- 测试不依赖真实数据库或付费模型。P1 增加真实 MySQL 集成测试，不能用 Mock 替代数据库约束验证。
+## 已实现接口
 
-## 依赖用途
+| 方法与路径 | 功能 |
+| --- | --- |
+| GET /health | 进程健康检查，不代表数据库连接正常 |
+| GET /api/v1/equipment/{equipment_no} | 设备基本信息 |
+| GET /api/v1/equipment/{equipment_no}/maintenance-records | 维修历史 |
+| GET /api/v1/equipment/{equipment_no}/tickets | 工单历史 |
+| POST /api/v1/tickets | 创建工单 |
+| PATCH /api/v1/tickets/{ticket_no} | 更新允许的字段 |
+
+历史接口使用 limit（默认 20，最大 100）和 offset（默认 0，最大 10000），按时间、ID 倒序排序，返回 items、limit、offset。不存在的设备返回 404；参数错误返回 422；业务状态冲突返回 409；操作员工无权限返回 403；数据库不可用返回 503。错误响应不回传 SQL 或请求原文。
+
+P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP-1001`。请求不能指定 created_by。**这不是认证系统，只适合本机演示，不应暴露到公共网络。** production 配置会拒绝启动。P3 的 Agent 审批尚未实现，当前写入是用户通过接口主动提交。
+
+## 验证
+
+```powershell
+.\.venv\Scripts\ruff.exe check .
+.\.venv\Scripts\ruff.exe format --check .
+# 普通测试；真实数据库测试会明确跳过
+.\.venv\Scripts\python.exe -m pytest -q
+# 完整验收：必须有有效的独立 MySQL 测试库
+.\.venv\Scripts\python.exe -m pytest --mysql -q
+.\.venv\Scripts\alembic.exe check
+```
+
+完整测试在本机已通过 44 项。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
+
+锁定的 Starlette TestClient 对 httpx 及 AnyIO 的兼容接口产生两条上游弃用提示，当前测试仍通过；未隐藏警告。后续升级测试客户端时处理，不影响本阶段接口功能。
+
+## 目录与依赖
+
+```text
+src/opsmind/
+  main.py          服务入口
+  core/            配置、日志、枚举和业务异常
+  api/             路由、请求依赖、错误响应
+  schemas/         输入校验与输出结构
+  services/        查询与工单规则、写事务
+  db/              ORM、连接、示例数据
+alembic/           可版本化的数据库迁移
+scripts/           本机数据库配置与数据导入
+tests/             单元与真实数据库集成测试
+docs/              架构、决策和学习说明
+```
 
 | 依赖 | 用途 |
 | --- | --- |
-| pydantic-settings | 环境配置读取和类型校验，间接引入 Pydantic |
-| pytest | 自动化测试 |
-| ruff | 静态检查、导入排序和格式化 |
-| hatchling | 构建并安装 src 布局的 Python 包 |
+| pydantic-settings / Pydantic | 配置、请求和响应校验 |
+| FastAPI | HTTP 接口和 OpenAPI 文档 |
+| Uvicorn | ASGI 服务运行 |
+| SQLAlchemy | ORM 与事务 |
+| PyMySQL[rsa] | MySQL 驱动及认证所需的 RSA 支持 |
+| Alembic | 表结构迁移 |
+| pytest / httpx | 自动化测试及 HTTP 测试客户端 |
+| Ruff | 代码检查与格式化 |
+| Hatchling | src 布局包的构建与安装 |
 
-FastAPI、SQLAlchemy、PyMySQL、Alembic 在 P1 引入；不提前安装 LLM、RAG 或工作流框架。
+配置顺序：显式构造参数 > 环境变量 > 根目录 .env > 默认值。日志输出 UTC 时间、级别、模块和事件；禁止记录密码、配置全文和原始业务请求。SecretStr 只是防止意外打印，不是加密或自动日志脱敏。
 
-## 分阶段交付
+## 阶段规划
 
-| 阶段 | 验收结果 |
-| --- | --- |
-| P0 | 工程配置、日志、架构和数据库设计 |
-| P1 | 可运行的业务后端、MySQL 初始化、测试数据和接口测试 |
-| P2 | 独立模型客户端、结构化输出和异常处理 |
-| P3 | 手写工具循环、步数限制、基础人工审批 |
-| P4 | 可追溯的知识检索和联合诊断 |
-| P5 | LangGraph 状态、检查点和审批恢复 |
-| P6 | 固定评估集、执行追踪和量化指标 |
-| P7 | 部署、展示界面和演示材料 |
+P0 工程基础 → **P1 业务后端** → P2 模型客户端 → P3 手写 Agent 与工具审批 → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
 
-每个阶段完成后停下验收，再进入下一阶段。详见 [原始要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[技术决策](docs/adr/0001-project-foundation.md)、[学习与作品证据](docs/learning.md)。
+每阶段验收后暂停。详见 [项目要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[P1 报告](docs/p1-report.md)、[学习与作品证据](docs/learning.md)。

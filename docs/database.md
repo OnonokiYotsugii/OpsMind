@@ -1,8 +1,8 @@
-# 第一版数据库设计（P0 设计稿）
+# 第一版数据库设计（P1 已实现）
 
-P1 使用 MySQL 8 / InnoDB / utf8mb4，由 Alembic 管理迁移。当前不创建表。
+P1 使用 MySQL 8 / InnoDB / utf8mb4，由 Alembic 0001 创建 equipment、employee、maintenance_record、ticket。KnowledgeDocument 仍为 P4 规划。
 
-统一约定：主键为 BIGINT 自增；时间为 DATETIME(6)，应用统一写入 UTC，展示时转换时区；created_at 默认创建时间，updated_at 在更新时由持久化代码维护。必填字段默认 NOT NULL，下面标明的字段可空。状态采用 VARCHAR 加 CHECK 约束，应用同步校验；具体取值在 P1 测试中固定。
+统一约定：主键为 BIGINT 自增；时间为 DATETIME(6)，应用统一写入 UTC，展示时转换时区；created_at 由应用默认写入创建时间，updated_at 在更新时由持久化代码维护；直接 SQL 写入需显式提供这些时间。必填字段默认 NOT NULL，下面标明的字段可空。状态采用 VARCHAR 加 CHECK 约束，应用同步校验；取值在 ORM CHECK 约束及请求模型中固定，代码类与迁移文件分别维护，并通过 alembic check 验证结构。
 
 ## equipment
 
@@ -14,7 +14,7 @@ id；equipment_no VARCHAR(64) UNIQUE；name VARCHAR(128)；model VARCHAR(128)；
 
 id；employee_no VARCHAR(64) UNIQUE；name VARCHAR(128)；department VARCHAR(128)；role VARCHAR(32)；status VARCHAR(32)；created_at。
 
-角色初稿：requester、technician、admin；状态：active、inactive。员工实体不等于认证账户，认证方案在 P1 明确。
+角色：requester、technician、admin；状态：active、inactive。员工实体不等于认证账户，当前使用固定演示身份，尚未实现登录。
 
 ## maintenance_record
 
@@ -26,7 +26,7 @@ id；equipment_id BIGINT 外键；fault_description TEXT；maintenance_action TE
 
 id；ticket_no VARCHAR(64) UNIQUE；equipment_id BIGINT 外键；title VARCHAR(200)；description TEXT；category VARCHAR(32)；priority VARCHAR(16)；status VARCHAR(32)；diagnosis TEXT 可空；created_by BIGINT 外键关联 employee；assigned_to BIGINT 外键关联 employee 可空；created_at；updated_at。
 
-初始分类：electrical、mechanical、software、other。优先级：low、medium、high、urgent。状态：open、in_progress、resolved、closed、cancelled；状态迁移规则在 P1 业务层明确并测试。
+初始分类：electrical、mechanical、software、other。优先级：low、medium、high、urgent。状态：open、in_progress、resolved、closed、cancelled；状态迁移：open → in_progress/cancelled；in_progress → resolved/cancelled；resolved → closed/in_progress；closed/cancelled 不再修改。处理中及之后要求处理人，解决及关闭要求诊断。
 
 索引：(equipment_id, created_at, id)。工单编号由程序生成并通过唯一约束防重，不能使用“查询数量加一”。避免以同名员工字符串作为关联键。
 
@@ -40,4 +40,4 @@ id；title VARCHAR(255)；document_type VARCHAR(32)；source VARCHAR(512)；vers
 
 equipment 1:N maintenance_record；equipment 1:N ticket；employee 1:N 维修记录和创建/分配的工单。外键采用 RESTRICT，不级联删除设备历史。首版不提供删除接口；设备和员工通过状态停用。不为所有实体添加软删除字段。
 
-P1 必须在真实 MySQL 上验证唯一键、外键、CHECK、事务回滚及分页，SQLite 不能替代这些兼容性验证。数据库凭据使用专用应用账号，不使用 root 作为运行账号。
+已在真实 MySQL 上验证唯一键、外键、CHECK、事务回滚及分页，SQLite 不替代这些兼容性验证。标识符与状态字段使用 utf8mb4_bin，避免状态大小写被数据库忽略。数据库凭据使用专用应用账号，不使用 root 作为运行账号。
