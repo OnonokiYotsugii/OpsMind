@@ -38,3 +38,19 @@ def observation(row: AgentRun, call_id: str, result: dict) -> None:
             }
         )
     row.messages = [*row.messages, {"role": "tool", "tool_call_id": call_id, "content": content}]
+
+
+def write_receipt_summary(events: list[dict]) -> str | None:
+    """Business write status must come from committed receipts, not generated prose."""
+    decisions = [item for item in events if item["kind"] == "decision" and item.get("approved")]
+    if not decisions:
+        return None
+    lines = ["已确认操作的执行结果（以数据库执行凭据为准）："]
+    for item in decisions:
+        result = item["result"]
+        if item["ok"]:
+            number = result["data"]["ticket_no"]
+            lines.append(f"- {item['tool']} 已成功执行，工单编号：{number}。")
+        else:
+            lines.append(f"- {item['tool']} 执行失败：{result['error']}，本次操作未保存。")
+    return "\n".join(lines)

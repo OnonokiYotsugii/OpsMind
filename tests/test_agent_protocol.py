@@ -96,3 +96,33 @@ def test_risk_is_server_owned():
     assert TOOLS["create_ticket"].risk == Risk.MEDIUM
     assert TOOLS["update_ticket"].risk == Risk.HIGH
     assert all(t.risk == Risk.LOW for n, t in TOOLS.items() if n.startswith("get_"))
+
+
+def test_deepseek_index_metadata_is_accepted_and_not_echoed():
+    body = tool_response()
+    body["choices"][0]["message"]["tool_calls"][0]["index"] = 0
+    turn = decode_tool_turn(json.dumps(body).encode())
+    assert turn.call.function.name == "get_equipment"
+    assert "index" not in turn.message["tool_calls"][0]
+
+
+def test_unknown_tool_envelope_fields_still_rejected():
+    body = tool_response()
+    body["choices"][0]["message"]["tool_calls"][0]["approved"] = True
+    with pytest.raises(LLMError):
+        decode_tool_turn(json.dumps(body).encode())
+
+
+def test_write_summary_is_based_on_receipt():
+    from opsmind.agent.state import write_receipt_summary
+
+    receipt = {
+        "kind": "decision",
+        "approved": True,
+        "ok": True,
+        "tool": "create_ticket",
+        "result": {"data": {"ticket_no": "TK-TEST"}},
+    }
+    summary = write_receipt_summary([receipt])
+    assert "已成功执行" in summary and "TK-TEST" in summary
+    assert write_receipt_summary([]) is None

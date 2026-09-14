@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from opsmind.agent.models import AgentRun
 from opsmind.agent.prompts import SYSTEM_PROMPT
-from opsmind.agent.state import event, expire, fail, observation, snapshot
+from opsmind.agent.state import event, expire, fail, observation, snapshot, write_receipt_summary
 from opsmind.core.config import Settings
 from opsmind.core.errors import BusinessError
 from opsmind.db.models import utc_now
@@ -97,7 +97,7 @@ class AgentStore:
                 return snapshot(row)
             if turn.call is None:
                 row.messages = [*row.messages, turn.message]
-                row.result = turn.message["content"]
+                row.result = write_receipt_summary(row.events) or turn.message["content"]
                 row.status = "completed"
                 event(row, "completed")
                 return snapshot(row)

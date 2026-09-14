@@ -17,6 +17,7 @@ class FunctionCall(BaseModel):
 
 class ToolCall(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    index: int | None = Field(default=None, ge=0)
     id: str = Field(min_length=1, max_length=128)
     type: str = Field(pattern="^function$")
     function: FunctionCall
@@ -45,7 +46,11 @@ def decode_tool_turn(raw: bytes) -> ToolTurn:
                 raise ValueError("Exactly one tool call per turn is supported.")
             call = ToolCall.model_validate(calls[0])
             return ToolTurn(
-                message={"role": "assistant", "content": None, "tool_calls": [call.model_dump()]},
+                message={
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [call.model_dump(exclude={"index"})],
+                },
                 call=call,
             )
         content = msg.get("content")

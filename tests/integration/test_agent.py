@@ -113,6 +113,7 @@ def test_unapproved_write_and_duplicate_confirmation(store):
     restarted = AgentRuntime(AgentStore(store.factory, store.settings), model)
     approved = asyncio.run(restarted.decide(run.id, ACTOR, action_id, True))
     assert approved.status == "completed"
+    assert "已成功执行" in approved.result
     assert count(store) == before + 1
     replay = asyncio.run(restarted.decide(run.id, ACTOR, action_id, True))
     assert replay.status == "completed"
