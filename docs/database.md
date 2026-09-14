@@ -41,3 +41,13 @@ id；title VARCHAR(255)；document_type VARCHAR(32)；source VARCHAR(512)；vers
 equipment 1:N maintenance_record；equipment 1:N ticket；employee 1:N 维修记录和创建/分配的工单。外键采用 RESTRICT，不级联删除设备历史。首版不提供删除接口；设备和员工通过状态停用。不为所有实体添加软删除字段。
 
 已在真实 MySQL 上验证唯一键、外键、CHECK、事务回滚及分页，SQLite 不替代这些兼容性验证。标识符与状态字段使用 utf8mb4_bin，避免状态大小写被数据库忽略。数据库凭据使用专用应用账号，不使用 root 作为运行账号。
+
+## P3 Agent 运行表（Alembic 0002）
+
+agent_run：32 位随机 id 主键、actor_no、status、messages JSON、events JSON、
+pending_action JSON 可空、result TEXT 可空、error_code、步骤/工具计数、
+处理耗时与预算、expires_at、created_at、updated_at。
+
+状态有 CHECK 约束。actor_no 保存发起运行的演示员工编号，并在访问/确认时校验。
+同一行保存审批凭据，在 SELECT FOR UPDATE 行锁下检查和更新，和工单写入原子提交。
+不保存密钥；messages 含用户任务和工具摘要，仅用于本地运行恢复，尚无自动保留期限。

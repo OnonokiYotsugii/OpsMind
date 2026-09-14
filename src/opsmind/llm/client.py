@@ -11,6 +11,7 @@ import httpx
 from opsmind.core.config import Settings
 from opsmind.llm.errors import LLMError
 from opsmind.llm.protocol import decode_completion
+from opsmind.llm.tool_protocol import ToolTurn, decode_tool_turn
 from opsmind.llm.types import Completion
 
 logger = logging.getLogger("opsmind.llm")
@@ -54,13 +55,33 @@ class OpenAICompatibleClient:
                 "llm_timeout", "Model request exceeded its total time budget.", 504
             ) from None
 
-    async def _attempts(self, messages: list[dict[str, str]], started: float) -> Completion:
+    async def complete_tools(self, messages: list[dict], tools: list[dict]) -> ToolTurn:
+        if not self.settings.llm_api_key.get_secret_value().strip():
+            raise LLMError("llm_not_configured", "Configure the model API key locally first.", 503)
+        started = time.monotonic()
+        try:
+            async with asyncio.timeout(self.settings.llm_total_timeout_seconds):
+                return await self._attempts(messages, started, tools=tools)
+        except TimeoutError:
+            raise LLMError("llm_timeout", "Model request exceeded its time budget.", 504) from None
+
+    async def _attempts(
+        self,
+        messages: list[dict],
+        started: float,
+        tools: list[dict] | None = None,
+    ) -> Completion | ToolTurn:
         attempts = self.settings.llm_max_retries + 1
         endpoint = self.settings.llm_base_url.rstrip("/") + "/chat/completions"
         headers = {
             "Authorization": "Bearer " + self.settings.llm_api_key.get_secret_value(),
             "Content-Type": "application/json",
         }
+        payload = self.payload(messages)
+        if tools is not None:
+            payload.pop("response_format", None)
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         for index in range(attempts):
             retry_after: str | None = None
             try:
@@ -68,7 +89,7 @@ class OpenAICompatibleClient:
                     "POST",
                     endpoint,
                     headers=headers,
-                    json=self.payload(messages),
+                    json=payload,
                     timeout=self.settings.llm_timeout_seconds,
                     follow_redirects=False,
                 ) as response:
@@ -80,6 +101,8 @@ class OpenAICompatibleClient:
                                 raise LLMError(
                                     "llm_response_too_large", "Model response is too large."
                                 )
+                        if tools is not None:
+                            return decode_tool_turn(bytes(raw))
                         content, model, usage = decode_completion(bytes(raw))
                         return Completion(
                             content=content,

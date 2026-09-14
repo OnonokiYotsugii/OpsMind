@@ -1,8 +1,8 @@
 # 架构设计
 
-## P2 当前实现
+## P3 当前实现
 
-已实现配置、日志、FastAPI 工厂、业务服务、输入/输出模型、SQLAlchemy 数据访问与 MySQL 迁移。Settings 实例化时读取环境，导入模块无数据库连接副作用。保留本机演示限制，新增 P2 单次模型分析接口；未实现 Agent 或 RAG。
+已实现配置、日志、FastAPI 工厂、业务服务、输入/输出模型、SQLAlchemy 数据访问与 MySQL 迁移。Settings 实例化时读取环境，导入模块无数据库连接副作用。保留本机演示限制，新增 P2 单次模型分析接口；新增手写 Agent 与确认接口，未实现 RAG 或 LangGraph。
 
 ## 逐步演进的分层
 
@@ -48,3 +48,13 @@ DeepSeek 使用 deepseek-v4-pro 和 JSON Output，再以 Pydantic 校验字段�
 模型输出是初步分析，不是已验证诊断，needs_human_review 也不是执行授权。
 
 当前自动测试包含真实 MySQL 回归和模拟模型 HTTP；真实模型连接状态见 P2 报告。
+
+## P3 工具循环与确认
+
+api/agent.py → AgentRuntime → AgentStore / ToolClient。
+ToolClient 调用模型，AgentStore 在短事务中执行只读工具或保存待确认动作。
+确认接口核对动作 ID，锁定运行行，将工单写入和执行凭据原子提交，然后继续模型循环。
+
+主路径不硬编码查询顺序；工具执行只能来自白名单。
+消息不包含密钥，但会持久化用户任务和工具摘要，需按业务数据对待。
+具体限制与测试证据见 P3 操作说明和阶段报告。

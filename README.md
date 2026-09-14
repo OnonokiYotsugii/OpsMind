@@ -2,7 +2,7 @@
 
 企业设备智能运维工单 Agent 学习与求职项目，按阶段构建。
 
-**当前阶段：P2 模型调用与结构化输出。** 保留 P1 工单后端，新增故障描述分析接口。P2 代码、105 项自动测试及一次真实 DeepSeek 结构化输出验证已完成；详情见 P2 报告。尚未实现 Agent 或 RAG。
+**当前阶段：P3 Tool Calling 与 Agent Loop。** 保留 P1/P2，新增业务工具、多轮 Agent 和持久化人工确认。139 项自动测试通过；P3 付费模型联调与手动体验留待之后。尚未实现 RAG 或 LangGraph。
 
 最终目标：结合业务数据和知识库诊断设备故障，经人工确认后创建或修改工单。当前 P1 先建立不带 AI 的可靠业务基础。
 
@@ -23,6 +23,10 @@ uv sync --locked --cache-dir .uv-cache
 
 浏览器打开 [接口文档](http://127.0.0.1:8000/docs)，查询 `EQ-10023`。完整的新手步骤见 [P1 操作教程](docs/p1-guide.md)。
 
+## P3 Agent
+
+新增运行、结果查询和确认接口；只读工具自动执行，写入等待具体动作确认。升级数据库后重启服务，详见 [P3 操作说明](docs/p3-guide.md) 和 [P3 阶段报告](docs/p3-report.md)。
+
 ## P2 模型分析
 
 新增 POST /api/v1/analyses，只分析用户输入，不查询数据库或写入工单。用户选择 DeepSeek deepseek-v4-pro；密钥存本机 .env。配置、真实调用验证和错误说明见 [P2 操作教程](docs/p2-guide.md)。
@@ -31,6 +35,9 @@ uv sync --locked --cache-dir .uv-cache
 
 | 方法与路径 | 功能 |
 | --- | --- |
+| POST /api/v1/agent/runs | 创建并推进 Agent 运行 |
+| GET /api/v1/agent/runs/{run_id} | 查询运行状态与执行凭据 |
+| POST /api/v1/agent/runs/{run_id}/decisions | 确认或拒绝具体写操作 |
 | POST /api/v1/analyses | 模型初步分析（不写工单） |
 | GET /health | 进程健康检查，不代表数据库连接正常 |
 | GET /api/v1/equipment/{equipment_no} | 设备基本信息 |
@@ -41,7 +48,7 @@ uv sync --locked --cache-dir .uv-cache
 
 历史接口使用 limit（默认 20，最大 100）和 offset（默认 0，最大 10000），按时间、ID 倒序排序，返回 items、limit、offset。不存在的设备返回 404；参数错误返回 422；业务状态冲突返回 409；操作员工无权限返回 403；数据库不可用返回 503。错误响应不回传 SQL 或请求原文。
 
-P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP-1001`。请求不能指定 created_by。**这不是认证系统，只适合本机演示，不应暴露到公共网络。** production 配置会拒绝启动。P3 的 Agent 审批尚未实现，当前写入是用户通过接口主动提交。
+P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP-1001`。请求不能指定 created_by。**这不是认证系统，只适合本机演示，不应暴露到公共网络。** production 配置会拒绝启动。P3 Agent 写入必须通过确认接口；P1 的手动工单接口仍是独立的用户主动操作入口。
 
 ## 验证
 
@@ -55,7 +62,7 @@ P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP
 .\.venv\Scripts\alembic.exe check
 ```
 
-完整测试在本机已通过 105 项，其中 61 项为新增 P2 自动测试。模型 HTTP 使用模拟传输；真实模型检查单独运行，不计入自动测试。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
+完整测试在本机已通过 139 项，其中 P2 新增 61 项、P3 新增 34 项。模型 HTTP 使用模拟传输；真实模型检查单独运行，不计入自动测试。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
 
 锁定的 Starlette TestClient 对 httpx 及 AnyIO 的兼容接口产生两条上游弃用提示，当前测试仍通过；未隐藏警告。后续升级测试客户端时处理，不影响本阶段接口功能。
 
@@ -69,6 +76,8 @@ src/opsmind/
   schemas/         输入校验与输出结构
   services/        查询与工单规则、写事务
   db/              ORM、连接、示例数据
+  tools/           工具白名单与执行
+  agent/           循环、持久化与确认
 alembic/           可版本化的数据库迁移
 scripts/           本机数据库配置与数据导入
 tests/             单元与真实数据库集成测试
@@ -92,6 +101,6 @@ docs/              架构、决策和学习说明
 
 ## 阶段规划
 
-P0 工程基础 → P1 业务后端 → **P2 模型客户端** → P3 手写 Agent 与工具审批 → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
+P0 工程基础 → P1 业务后端 → P2 模型客户端 → **P3 手写 Agent 与工具审批** → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
 
 每阶段验收后暂停。详见 [项目要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[P1 报告](docs/p1-report.md)、[学习与作品证据](docs/learning.md)、[P2 报告](docs/p2-report.md)。
