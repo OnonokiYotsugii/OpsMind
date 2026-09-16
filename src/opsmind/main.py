@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from opsmind.api.agent import router as agent_router
 from opsmind.api.analysis import router as analysis_router
 from opsmind.api.errors import install_error_handlers
+from opsmind.api.knowledge import router as knowledge_router
 from opsmind.api.routes import router
 from opsmind.core.config import Settings
 from opsmind.core.logging import configure_logging
@@ -46,4 +47,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(analysis_router)
     app.include_router(agent_router)
+    app.include_router(knowledge_router)
     return app

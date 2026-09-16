@@ -15,6 +15,7 @@ from opsmind.core.config import Settings
 from opsmind.core.errors import BusinessError
 from opsmind.db.models import utc_now
 from opsmind.llm.tool_protocol import ToolTurn
+from opsmind.rag.citations import checked_answer
 from opsmind.schemas.agent import RunRead
 from opsmind.services.tickets import get_actor
 from opsmind.tools.executor import execute_read
@@ -85,7 +86,14 @@ class AgentStore:
             event(row, "model_step", step=row.steps)
             return row.messages, row.time_budget_ms - row.elapsed_ms
 
-    def apply(self, run_id: str, actor: str, turn: ToolTurn, elapsed_ms: int) -> RunRead:
+    def apply(
+        self,
+        run_id: str,
+        actor: str,
+        turn: ToolTurn,
+        elapsed_ms: int,
+        knowledge_result: dict | None = None,
+    ) -> RunRead:
         with self.factory() as session, session.begin():
             row = self.load(session, run_id, actor)
             expire(row)
@@ -97,7 +105,9 @@ class AgentStore:
                 return snapshot(row)
             if turn.call is None:
                 row.messages = [*row.messages, turn.message]
-                row.result = write_receipt_summary(row.events) or turn.message["content"]
+                row.result = write_receipt_summary(row.events) or checked_answer(
+                    turn.message["content"], row.messages
+                )
                 row.status = "completed"
                 event(row, "completed")
                 return snapshot(row)
@@ -115,9 +125,12 @@ class AgentStore:
             try:
                 definition, params = validate_call(call.function.name, call.function.arguments)
                 if definition.risk == Risk.LOW:
-                    result = execute_read(session, definition, params)
+                    if definition.name == "search_knowledge":
+                        result = knowledge_result or {"ok": False, "error": "knowledge_unavailable"}
+                    else:
+                        result = execute_read(session, definition, params)
                     observation(row, call.id, result)
-                    event(row, "tool_result", tool=definition.name, ok=True)
+                    event(row, "tool_result", tool=definition.name, ok=result["ok"])
                 else:
                     employee = get_actor(session, actor)
                     if employee.role == "requester" and (
@@ -158,6 +171,35 @@ class AgentStore:
                 if row.elapsed_ms >= row.time_budget_ms:
                     fail(row, "agent_timeout")
             return snapshot(row)
+
+    def may_search(self, run_id: str, actor: str, call_id: str) -> bool:
+        with self.factory() as session, session.begin():
+            row = self.load(session, run_id, actor)
+            expire(row)
+            prior_ids = {c["id"] for msg in row.messages for c in msg.get("tool_calls", [])}
+            return (
+                row.status == "running"
+                and row.tool_calls < row.max_tool_calls
+                and call_id not in prior_ids
+                and row.elapsed_ms < row.time_budget_ms
+            )
+
+    def correct_multiple_calls(self, run_id: str, actor: str, elapsed_ms: int) -> None:
+        with self.factory() as session, session.begin():
+            row = self.load(session, run_id, actor)
+            expire(row)
+            if row.status != "running":
+                return
+            row.elapsed_ms += elapsed_ms
+            row.messages = [
+                *row.messages,
+                {
+                    "role": "system",
+                    "content": "刚才返回了多个工具调用，程序全部拒绝，没有执行任何一个。"
+                    "下一轮只选择一个最先需要的工具，等待结果后再选择下一个。",
+                },
+            ]
+            event(row, "protocol_correction", code="llm_multiple_tool_calls")
 
     def mark_failed(self, run_id: str, actor: str, code: str) -> RunRead:
         with self.factory() as session, session.begin():

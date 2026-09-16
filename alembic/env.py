@@ -5,6 +5,7 @@ from opsmind.agent.models import AgentRun  # noqa: F401
 from opsmind.core.config import Settings
 from opsmind.db.models import Base
 from opsmind.db.session import create_db_engine, validated_mysql_url
+from opsmind.rag.models import KnowledgeDocument  # noqa: F401
 
 config = context.config
 target_metadata = Base.metadata

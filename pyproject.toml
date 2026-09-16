@@ -16,6 +16,8 @@ dependencies = [
     "pymysql[rsa]>=1.1,<2",
     "alembic>=1.14,<2",
     "httpx>=0.28,<1",
+    "chromadb>=1.0,<2",
+    "fastembed>=0.7,<1",
 ]
 
 [dependency-groups]

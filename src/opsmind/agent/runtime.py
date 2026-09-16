@@ -6,16 +6,19 @@ import time
 from sqlalchemy.exc import SQLAlchemyError
 
 from opsmind.agent.store import AgentStore
+from opsmind.core.errors import BusinessError
 from opsmind.llm.errors import LLMError
 from opsmind.llm.tool_protocol import ToolClient
+from opsmind.rag.service import KnowledgeService
 from opsmind.schemas.agent import RunRead
-from opsmind.tools.registry import TOOLS
+from opsmind.tools.registry import TOOLS, validate_call
 
 
 class AgentRuntime:
     def __init__(self, store: AgentStore, client: ToolClient):
         self.store = store
         self.client = client
+        self.knowledge = KnowledgeService(store.factory, store.settings)
 
     async def create(self, message: str, actor: str) -> RunRead:
         run = await asyncio.to_thread(self.store.create, message, actor)
@@ -40,14 +43,42 @@ class AgentRuntime:
                     return await asyncio.to_thread(self.store.get, run_id, actor)
                 messages, remaining_ms = context
                 started = time.monotonic()
-                async with asyncio.timeout(remaining_ms / 1000):
-                    turn = await self.client.complete_tools(messages, declarations)
+                try:
+                    async with asyncio.timeout(remaining_ms / 1000):
+                        turn = await self.client.complete_tools(messages, declarations)
+                except LLMError as exc:
+                    if exc.code != "llm_multiple_tool_calls":
+                        raise
+                    await asyncio.to_thread(
+                        self.store.correct_multiple_calls,
+                        run_id,
+                        actor,
+                        max(1, round((time.monotonic() - started) * 1000)),
+                    )
+                    continue
+                knowledge_result = None
+                if (
+                    turn.call
+                    and turn.call.function.name == "search_knowledge"
+                    and await asyncio.to_thread(self.store.may_search, run_id, actor, turn.call.id)
+                ):
+                    try:
+                        _, params = validate_call(
+                            turn.call.function.name, turn.call.function.arguments
+                        )
+                        remaining = remaining_ms / 1000 - (time.monotonic() - started)
+                        async with asyncio.timeout(max(0, remaining)):
+                            data = await asyncio.to_thread(self.knowledge.search, params)
+                        knowledge_result = {"ok": True, "data": data}
+                    except BusinessError as exc:
+                        knowledge_result = {"ok": False, "error": exc.code, "message": exc.message}
                 run = await asyncio.to_thread(
                     self.store.apply,
                     run_id,
                     actor,
                     turn,
                     max(1, round((time.monotonic() - started) * 1000)),
+                    knowledge_result,
                 )
                 if run.status != "running":
                     return run

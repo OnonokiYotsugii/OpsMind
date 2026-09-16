@@ -42,6 +42,8 @@ def decode_tool_turn(raw: bytes) -> ToolTurn:
             raise ValueError("Not an assistant response.")
         if choice["finish_reason"] == "tool_calls":
             calls = msg["tool_calls"]
+            if isinstance(calls, list) and len(calls) > 1:
+                raise LLMError("llm_multiple_tool_calls", "Choose one tool per turn.")
             if not isinstance(calls, list) or len(calls) != 1:
                 raise ValueError("Exactly one tool call per turn is supported.")
             call = ToolCall.model_validate(calls[0])

@@ -51,3 +51,7 @@ class Settings(BaseSettings):
     agent_max_tool_calls: int = Field(default=8, ge=1, le=30)
     agent_timeout_seconds: int = Field(default=120, ge=5, le=300)
     agent_approval_ttl_seconds: int = Field(default=1800, ge=60, le=86400)
+
+    rag_model_cache: str = ".cache/embeddings"
+    rag_index_path: str = ".data/chroma"
+    rag_max_distance: float = Field(default=0.22, ge=0, le=2)

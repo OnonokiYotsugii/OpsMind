@@ -42,7 +42,7 @@ def test_tools_http_roundtrip_and_non_json_mode():
             body = json.loads(request.content)
             assert "response_format" not in body
             assert body["tool_choice"] == "auto"
-            assert len(body["tools"]) == 5
+            assert len(body["tools"]) == 6
             assert body["thinking"] == {"type": "disabled"}
             return httpx.Response(200, json=tool_response())
 

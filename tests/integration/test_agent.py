@@ -445,3 +445,15 @@ def test_agent_api_full_flow(store):
         assert client.post(path + "/decisions", json=decision).status_code == 200
         assert client.get(path).json()["status"] == "completed"
     assert count(store) == before + 1
+
+
+def test_multiple_tool_correction_is_bounded_and_never_writes(store):
+    class BatchModel:
+        async def complete_tools(self, messages, tools):
+            raise LLMError("llm_multiple_tool_calls", "batch rejected")
+
+    before = count(store)
+    result = asyncio.run(AgentRuntime(store, BatchModel()).create("查询", ACTOR))
+    assert result.status == "failed" and result.error_code == "max_steps_exceeded"
+    assert result.steps == store.settings.agent_max_steps and result.tool_calls == 0
+    assert count(store) == before
