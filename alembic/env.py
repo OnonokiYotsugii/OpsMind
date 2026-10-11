@@ -1,6 +1,7 @@
 """Read migration credentials from Settings, never from a committed ini file."""
 
 from alembic import context
+from opsmind.agent.checkpoint_models import GraphCheckpoint  # noqa: F401
 from opsmind.agent.models import AgentRun  # noqa: F401
 from opsmind.core.config import Settings
 from opsmind.db.models import Base

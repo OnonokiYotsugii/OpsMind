@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opsmind.agent.execution import check_owner
 from opsmind.agent.models import AgentRun
 from opsmind.agent.prompts import SYSTEM_PROMPT
 from opsmind.agent.state import event, expire, fail, observation, snapshot, write_receipt_summary
@@ -19,7 +20,7 @@ from opsmind.rag.citations import checked_answer
 from opsmind.schemas.agent import RunRead
 from opsmind.services.tickets import get_actor
 from opsmind.tools.executor import execute_read
-from opsmind.tools.registry import Risk, validate_call
+from opsmind.tools.registry import TOOLS, Risk, validate_call
 
 
 class AgentStore:
@@ -33,6 +34,7 @@ class AgentStore:
             raise BusinessError("run_not_found", "Agent run does not exist.", 404)
         if row.actor_no != actor:
             raise BusinessError("run_forbidden", "This run belongs to another employee.", 403)
+        check_owner(row)
         get_actor(session, actor)
         return row
 
@@ -61,7 +63,7 @@ class AgentStore:
             )
             session.add(row)
             session.flush()
-            event(row, "started")
+            event(row, "started", trace_version=1)
             return snapshot(row)
 
     def get(self, run_id: str, actor: str) -> RunRead:
@@ -93,12 +95,18 @@ class AgentStore:
         turn: ToolTurn,
         elapsed_ms: int,
         knowledge_result: dict | None = None,
+        effect_id: str | None = None,
+        knowledge_ms: int = 0,
     ) -> RunRead:
         with self.factory() as session, session.begin():
             row = self.load(session, run_id, actor)
             expire(row)
             if row.status != "running":
                 return snapshot(row)
+            if effect_id:
+                if any(e.get("effect_id") == effect_id for e in row.events):
+                    return snapshot(row)
+                event(row, "graph_effect", effect_id=effect_id)
             row.elapsed_ms += elapsed_ms
             if row.elapsed_ms >= row.time_budget_ms:
                 fail(row, "agent_timeout")
@@ -122,6 +130,7 @@ class AgentStore:
             row.tool_calls += 1
             row.messages = [*row.messages, turn.message]
             tool_started = time.monotonic()
+            tool_outcome = "error"
             try:
                 definition, params = validate_call(call.function.name, call.function.arguments)
                 if definition.risk == Risk.LOW:
@@ -129,6 +138,26 @@ class AgentStore:
                         result = knowledge_result or {"ok": False, "error": "knowledge_unavailable"}
                     else:
                         result = execute_read(session, definition, params)
+                    tool_outcome = "success" if result["ok"] else "error"
+                    if definition.name == "search_knowledge" and result["ok"]:
+                        event(
+                            row,
+                            "retrieval",
+                            call_id=call.id,
+                            items=[
+                                {
+                                    k: item[k]
+                                    for k in (
+                                        "citation",
+                                        "source",
+                                        "version",
+                                        "heading",
+                                        "distance",
+                                    )
+                                }
+                                for item in result["data"].get("items", [])[:5]
+                            ],
+                        )
                     observation(row, call.id, result)
                     event(row, "tool_result", tool=definition.name, ok=result["ok"])
                 else:
@@ -139,6 +168,7 @@ class AgentStore:
                         raise BusinessError(
                             "tool_forbidden", "Employee cannot perform this action.", 403
                         )
+                    tool_outcome = "proposed"
                     row.pending_action = {
                         "action_id": uuid4().hex,
                         "tool_call_id": call.id,
@@ -167,7 +197,16 @@ class AgentStore:
                 observation(row, call.id, {"ok": False, "error": exc.code, "message": exc.message})
                 event(row, "tool_result", tool=call.function.name, ok=False, code=exc.code)
             finally:
-                row.elapsed_ms += max(1, round((time.monotonic() - tool_started) * 1000))
+                duration = max(1, round((time.monotonic() - tool_started) * 1000))
+                event(
+                    row,
+                    "tool_span",
+                    tool=call.function.name if call.function.name in TOOLS else "unknown",
+                    call_id=call.id,
+                    duration_ms=duration + knowledge_ms,
+                    outcome=tool_outcome,
+                )
+                row.elapsed_ms += duration
                 if row.elapsed_ms >= row.time_budget_ms:
                     fail(row, "agent_timeout")
             return snapshot(row)
@@ -212,3 +251,57 @@ class AgentStore:
         from opsmind.agent.approval import decide
 
         return decide(self, run_id, actor, action_id, approved)
+
+    def claim(self, run_id: str, actor: str, owner: str) -> None:
+        with self.factory() as session, session.begin():
+            row = self.load(session, run_id, actor)
+            if row.graph_owner and row.graph_lease_until and row.graph_lease_until > utc_now():
+                raise BusinessError(
+                    "run_busy", "This run is already being processed; retry later.", 409
+                )
+            if not any(e["kind"] == "graph_enabled" for e in row.events):
+                event(row, "graph_enabled", version=1)
+            row.graph_owner = owner
+            row.graph_lease_until = utc_now() + timedelta(seconds=420)
+
+    def release(self, run_id: str, owner: str) -> None:
+        with self.factory() as session, session.begin():
+            row = session.get(AgentRun, run_id, with_for_update=True)
+            if row and row.graph_owner == owner:
+                row.graph_owner = None
+                row.graph_lease_until = None
+
+    def validate_decision(self, run_id: str, actor: str, action_id: str, approved: bool) -> RunRead:
+        with self.factory() as session, session.begin():
+            row = self.load(session, run_id, actor)
+            for receipt in row.events:
+                if receipt["kind"] == "decision" and receipt["action_id"] == action_id:
+                    if receipt["approved"] != approved:
+                        raise BusinessError(
+                            "decision_conflict", "Action already has a different decision."
+                        )
+                    return snapshot(row)
+            expire(row)
+            if row.status == "failed":
+                return snapshot(row)
+            if row.status != "waiting_confirmation" or row.pending_action is None:
+                raise BusinessError("no_pending_action", "Run is not awaiting confirmation.")
+            if row.pending_action["action_id"] != action_id:
+                raise BusinessError(
+                    "action_mismatch", "Confirmation does not match the pending action."
+                )
+            return snapshot(row)
+
+    def remaining_budget(self, run_id: str, actor: str) -> int:
+        with self.factory() as session:
+            row = self.load(session, run_id, actor)
+            return max(0, row.time_budget_ms - row.elapsed_ms)
+
+    def record_model(
+        self, run_id: str, actor: str, kind: str, trace_id: str, details: dict
+    ) -> None:
+        with self.factory() as session, session.begin():
+            row = self.load(session, run_id, actor)
+            if any(e["kind"] == kind and e.get("trace_id") == trace_id for e in row.events):
+                return
+            event(row, kind, trace_id=trace_id, **details)

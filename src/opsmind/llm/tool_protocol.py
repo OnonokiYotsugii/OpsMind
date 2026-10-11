@@ -27,6 +27,7 @@ class ToolCall(BaseModel):
 class ToolTurn:
     message: dict
     call: ToolCall | None
+    telemetry: dict | None = None
 
 
 class ToolClient(Protocol):

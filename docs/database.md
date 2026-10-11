@@ -51,3 +51,12 @@ pending_action JSON 可空、result TEXT 可空、error_code、步骤/工具计�
 状态有 CHECK 约束。actor_no 保存发起运行的演示员工编号，并在访问/确认时校验。
 同一行保存审批凭据，在 SELECT FOR UPDATE 行锁下检查和更新，和工单写入原子提交。
 不保存密钥；messages 含用户任务和工具摘要，仅用于本地运行恢复，尚无自动保留期限。
+
+
+## P5 graph_checkpoint（迁移 0004）
+
+复合主键：(run_id, namespace, checkpoint_id)。run_id 外键关联 agent_run，删除受 RESTRICT 保护。
+parent_id 记录父检查点，payload/meta 保存框架 typed serializer 的 Base64 JSON 封装，writes 保存节点部分结果，created_at 为 UTC。
+完整快照和部分结果可能异步到达，未完成的占位快照不会被读取为可恢复状态。
+agent_run 新增可空 graph_owner 与 graph_lease_until，旧行可直接读取。
+检查点可能包含业务文本，仅内部访问；当前无自动清理策略。业务账号仍只需 SELECT/INSERT/UPDATE，迁移由专用账号执行。

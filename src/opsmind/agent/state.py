@@ -23,6 +23,10 @@ def fail(row: AgentRun, code: str) -> None:
 
 
 def expire(row: AgentRun) -> None:
+    # Durable P5 execution can recover after downtime; its processing budget persists.
+    # Human approval still has its original absolute expiry.
+    if row.status == "running" and any(e["kind"] == "graph_enabled" for e in row.events):
+        return
     if row.status in {"running", "waiting_confirmation"} and row.expires_at < utc_now():
         fail(row, "approval_expired" if row.status == "waiting_confirmation" else "run_interrupted")
 

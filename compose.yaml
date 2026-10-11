@@ -1,0 +1,48 @@
+name: opsmind-demo
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: opsmind_demo
+    secrets: [mysql_root_password]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./.data/docker/init.sql:/docker-entrypoint-initdb.d/01-accounts.sql:ro
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  init:
+    build: .
+    image: opsmind-demo:local
+    command: [python, scripts/container_init.py]
+    env_file: .data/docker/migration.env
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    build: .
+    image: opsmind-demo:local
+    env_file: .data/docker/app.env
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - embeddings:/app/.cache/embeddings
+      - knowledge-index:/app/.data/chroma
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+secrets:
+  mysql_root_password:
+    file: .data/docker/root-password
+volumes:
+  mysql-data:
+  embeddings:
+  knowledge-index:

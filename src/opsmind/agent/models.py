@@ -30,3 +30,6 @@ class AgentRun(Updated, Base):
     max_tool_calls: Mapped[int] = mapped_column(Integer)
     time_budget_ms: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6))
+
+    graph_owner: Mapped[str | None] = mapped_column(code_type(32))
+    graph_lease_until: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))

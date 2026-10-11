@@ -2,9 +2,37 @@
 
 企业设备智能运维工单 Agent 学习与求职项目，按阶段构建。
 
-**当前阶段：P4 RAG。** 已接通本地知识库检索、业务工具和人工确认。168 项测试通过，真实 DeepSeek 只读 RAG 联调通过；尚未引入 LangGraph。
+**当前阶段：P7 部署与展示。** 中文工作台、Docker 配置和展示文档已实现。211 项自动测试通过；Docker 实跑与真实模型最终联调待完成。
 
-最终目标：结合业务数据和知识库诊断设备故障，经人工确认后创建或修改工单。当前 P1 先建立不带 AI 的可靠业务基础。
+最终目标：结合业务数据和知识库诊断设备故障，经人工确认后创建或修改工单。已实现业务查询、RAG、审批、持久恢复与评测。
+
+## 演示工作台
+
+![OpsMind 中文工作台](docs/images/workspace.png)
+
+启动后打开 [工作台](http://127.0.0.1:8000/)，输入故障描述、查看依据并确认工单操作。示例按钮只填入文字，提交才调用模型。
+详见 [P7 启动教程](docs/p7-guide.md)、[阶段报告](docs/p7-report.md) 与 [GitHub / 面试展示](docs/showcase.md)。
+
+## 架构
+
+```mermaid
+flowchart LR
+    UI[中文工作台 / Swagger] --> API[FastAPI]
+    API --> G[LangGraph Agent]
+    G --> L[DeepSeek 模型客户端]
+    G --> T[工具白名单与参数校验]
+    T --> R[本地 Embedding + Chroma]
+    T --> H{写操作人工确认}
+    H -->|批准| B[业务服务与原子执行凭据]
+    T -->|只读查询| B
+    B --> DB[(MySQL)]
+    G --> C[状态与检查点]
+    C --> DB
+    G --> O[执行 Trace]
+    E[隔离回滚评测] --> G
+```
+
+本机演示系统，无正式登录；审批由服务端验证动作，不依赖前端按钮控制。
 
 ## 快速开始（Windows / PowerShell）
 
@@ -21,7 +49,18 @@ uv sync --locked --cache-dir .uv-cache
 
 已配置数据库的机器跳过 setup_local_mysql.py。它不覆盖已有连接配置；若指定库已有表，会停止保护现有数据。脚本只保存生成的应用账号连接串，不保存管理员密码。手动配置可参考 `.env.example`，不要覆盖已有 `.env`。
 
-浏览器打开 [接口文档](http://127.0.0.1:8000/docs)，查询 `EQ-10023`。完整的新手步骤见 [P1 操作教程](docs/p1-guide.md)。
+浏览器打开 [工作台](http://127.0.0.1:8000/) 或 [接口文档](http://127.0.0.1:8000/docs)，查询 `EQ-10023`。完整的新手步骤见 [P1 操作教程](docs/p1-guide.md)。
+
+## P6 评测与执行 Trace
+
+运行 `.\.venv\Scripts\python.exe scripts/evaluate.py` 生成本地评测报告，默认不调用付费模型。
+查看 [P6 新手教程](docs/p6-guide.md) 和 [P6 阶段报告](docs/p6-report.md)。新增 GET `/api/v1/agent/runs/{run_id}/trace` 查看运行指标与事件。
+
+## P5 持久 Agent 流程
+
+Agent 改为 LangGraph 节点流程，审批可跨进程恢复。新增 `POST /api/v1/agent/runs/{run_id}/resume`，恢复不等于批准。
+查看 [P5 学习与操作教程](docs/p5-guide.md)、[P5 阶段报告](docs/p5-report.md) 和 [ADR 0006](docs/adr/0006-langgraph-mysql.md)。
+升级到迁移 0004 后重启后端。强制退出遗留的运行锁最长 420 秒后可接管；业务写入仍依据原子执行凭据防重。
 
 ## P4 知识库
 
@@ -42,7 +81,9 @@ uv sync --locked --cache-dir .uv-cache
 | 方法与路径 | 功能 |
 | --- | --- |
 | POST /api/v1/agent/runs | 创建并推进 Agent 运行 |
+| GET /api/v1/agent/runs/{run_id}/trace | 查询执行记录与指标 |
 | GET /api/v1/agent/runs/{run_id} | 查询运行状态与执行凭据 |
+| POST /api/v1/agent/runs/{run_id}/resume | 从检查点恢复，不自动批准 |
 | POST /api/v1/agent/runs/{run_id}/decisions | 确认或拒绝具体写操作 |
 | POST /api/v1/knowledge/search | 检索知识片段及来源 |
 | POST /api/v1/analyses | 模型初步分析（不写工单） |
@@ -69,9 +110,9 @@ P1 使用服务端配置的演示员工 `OPSMIND_DEMO_EMPLOYEE_NO`，默认 `EMP
 .\.venv\Scripts\alembic.exe check
 ```
 
-完整测试在本机已通过 168 项，其中 P2 新增 61 项、P3 新增 37 项、P4 新增 26 项。完整 P4 验收使用 `pytest --mysql --embedding -q`，需先准备本地模型。模型 HTTP 使用模拟传输；真实模型检查单独运行，不计入自动测试。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
+完整测试在本机已通过 211 项，其中 P2 新增 61 项、P3 新增 37 项、P4 新增 26 项、P5 新增 11 项、P6 新增 29 项、P7 新增 3 项。完整验收使用 `pytest --mysql --embedding -q`，需先准备本地模型。模型 HTTP 使用模拟传输；真实模型检查单独运行，不计入自动测试。测试限定本机 `opsmind_test`，拒绝与应用/迁移库同名；每个测试使用外层事务隔离，结束后回滚。不使用 SQLite 或 Mock 替代 MySQL 的业务与约束测试。错误响应单元测试注入数据库异常，仅验证响应脱敏。
 
-锁定的 Starlette TestClient 对 httpx 及 AnyIO 的兼容接口产生两条上游弃用提示，当前测试仍通过；未隐藏警告。后续升级测试客户端时处理，不影响本阶段接口功能。
+当前完整测试保留 AnyIO 弃用提示和 FastEmbed mean pooling 说明。P5 的传递依赖引入 httpx2 后，原 TestClient 的 httpx 提示已不再出现。
 
 ## 目录与依赖
 
@@ -84,7 +125,10 @@ src/opsmind/
   services/        查询与工单规则、写事务
   db/              ORM、连接、示例数据
   tools/           工具白名单与执行
-  agent/           循环、持久化与确认
+  agent/           LangGraph、持久化与确认
+  web/             中文演示工作台
+  evaluation/      隔离评测与报告
+  observability/   安全 Trace 与指标
   rag/             文档切分、向量检索与引用
 knowledge/         虚构演示资料
 alembic/           可版本化的数据库迁移
@@ -110,8 +154,10 @@ docs/              架构、决策和学习说明
 
 ## 阶段规划
 
-P0 工程基础 → P1 业务后端 → P2 模型客户端 → **P3 手写 Agent 与工具审批** → P4 RAG → P5 LangGraph → P6 评估与观测 → P7 部署展示。
+P0 工程基础 → P1 业务后端 → P2 模型客户端 → P3 手写 Agent 与工具审批 → P4 RAG → P5 LangGraph → P6 评估与观测 → **P7 部署展示**。
 
 每阶段验收后暂停。详见 [项目要求](项目.md)、[架构](docs/architecture.md)、[数据库](docs/database.md)、[P1 报告](docs/p1-report.md)、[学习与作品证据](docs/learning.md)、[P2 报告](docs/p2-report.md)。
 
 P4 新增直接依赖：chromadb（本地向量索引）和 fastembed（本地多语言 ONNX 推理）。完整测试还会显示模型 mean pooling 行为说明，见 P4 教程。
+
+P5 新增直接依赖 langgraph（节点、条件分支、持久中断恢复），其传递依赖与版本由 uv.lock 固定。现有 LLM HTTP 客户端继续复用。

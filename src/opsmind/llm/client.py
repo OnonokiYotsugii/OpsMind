@@ -1,16 +1,19 @@
 """Bounded async Chat Completions adapter; provider options stay inside this layer."""
 
 import asyncio
+import json
 import logging
 import random
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 import httpx
 
 from opsmind.core.config import Settings
 from opsmind.llm.errors import LLMError
 from opsmind.llm.protocol import decode_completion
+from opsmind.llm.telemetry import response_metadata
 from opsmind.llm.tool_protocol import ToolTurn, decode_tool_turn
 from opsmind.llm.types import Completion
 
@@ -102,7 +105,21 @@ class OpenAICompatibleClient:
                                     "llm_response_too_large", "Model response is too large."
                                 )
                         if tools is not None:
-                            return decode_tool_turn(bytes(raw))
+                            try:
+                                envelope = json.loads(raw)
+                                metadata = (
+                                    response_metadata(envelope, index + 1)
+                                    if isinstance(envelope, dict)
+                                    else {}
+                                )
+                            except (ValueError, TypeError):
+                                metadata = {}
+                            try:
+                                turn = decode_tool_turn(bytes(raw))
+                            except LLMError as exc:
+                                exc.telemetry = metadata
+                                raise
+                            return replace(turn, telemetry=metadata)
                         content, model, usage = decode_completion(bytes(raw))
                         return Completion(
                             content=content,

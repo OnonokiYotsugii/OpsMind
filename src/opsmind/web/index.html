@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OpsMind · 运维工作台</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+    <script src="/assets/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#message">跳到任务输入</a>
+    <header>
+      <a class="brand" href="/">OpsMind<span>设备运维工作台</span></a>
+      <nav aria-label="辅助导航">
+        <span class="local">本机演示</span
+        ><a href="/docs" target="_blank" rel="noopener">接口文档 ↗</a>
+      </nav>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <p class="context">设备运维 / 智能助手</p>
+          <h1>从故障描述，到处理方案。</h1>
+          <p>查询设备、查找维修依据，在确认后生成工单。</p>
+        </div>
+        <span id="health" class="badge">正在检查服务</span>
+      </div>
+      <div class="workspace">
+        <section class="composer" aria-labelledby="task-title">
+          <h2 id="task-title">发起任务</h2>
+          <p class="muted">输入设备编号，以及你观察到的现象。</p>
+          <form id="task-form">
+            <label for="message">故障描述或查询问题</label
+            ><textarea
+              id="message"
+              required
+              maxlength="4000"
+              rows="7"
+              placeholder="例如：查询 EQ-10023 的设备信息和最近维修记录。"
+            ></textarea>
+            <div class="examples">
+              <button
+                type="button"
+                data-example="查询 EQ-10023 的设备信息和最近维修记录。"
+              >
+                设备与维修记录</button
+              ><button
+                type="button"
+                data-example="EQ-10023 出现 E102 报警，请查询设备和知识库，给出带来源的排查建议。"
+              >
+                E102 故障排查</button
+              ><button
+                type="button"
+                data-example="请为 EQ-10023 创建工单：开机后持续报警，优先级 high，类别 electrical。"
+              >
+                创建工单
+              </button>
+            </div>
+            <button class="primary" id="submit" type="submit">
+              开始处理 <span aria-hidden="true">→</span>
+            </button>
+            <p class="fine">
+              提交后调用已配置的模型，会消耗 API 额度。写入工单需要单独确认。
+            </p>
+          </form>
+          <div class="lookup">
+            <h3>继续已有任务</h3>
+            <form id="load-form">
+              <label for="run-id">运行编号</label>
+              <div class="input-row">
+                <input
+                  id="run-id"
+                  pattern="[a-f0-9]{32}"
+                  maxlength="32"
+                  required
+                  autocomplete="off"
+                  placeholder="粘贴 32 位运行编号"
+                /><button type="submit">查询</button>
+              </div>
+            </form>
+            <p class="fine">查询不调用模型；恢复执行可能继续调用模型。</p>
+          </div>
+        </section>
+        <section id="output" class="output" aria-labelledby="result-title">
+          <div class="section-head">
+            <h2 id="result-title">处理结果</h2>
+            <span id="status" class="badge">等待输入</span>
+          </div>
+          <div id="notice" role="status" aria-live="polite"></div>
+          <div id="error" role="alert" hidden></div>
+          <div id="empty">
+            <div class="empty-symbol" aria-hidden="true">↳</div>
+            <h3>先从一台设备开始</h3>
+            <p>
+              输入问题或选一个示例。完成后，这里会显示处理结果、引用资料和执行记录。
+            </p>
+            <ol>
+              <li>描述现象</li>
+              <li>查看分析与依据</li>
+              <li>确认需要的操作</li>
+            </ol>
+          </div>
+          <div id="run" hidden>
+            <p class="run-label">运行编号 <code id="current-id"></code></p>
+            <p id="answer" class="answer"></p>
+            <div id="approval" hidden>
+              <h3>待确认的工单操作</h3>
+              <p>请核对下方内容。确认后将实际写入数据库。</p>
+              <p id="action-name"></p>
+              <dl id="arguments"></dl>
+              <p id="expires" class="fine"></p>
+              <div class="actions">
+                <button id="approve" class="primary" type="button">
+                  确认执行</button
+                ><button id="reject" type="button">拒绝操作</button>
+              </div>
+            </div>
+            <div class="actions">
+              <button id="refresh" type="button">刷新状态</button
+              ><button id="resume" type="button" hidden>恢复执行</button>
+            </div>
+            <section class="evidence">
+              <h3>检索来源</h3>
+              <ul id="sources"></ul>
+            </section>
+            <details id="trace">
+              <summary>执行记录与用量</summary>
+              <p class="fine">耗时为已记录的处理时间；未知用量不等于零。</p>
+              <dl id="metrics"></dl>
+              <ol id="events"></ol>
+            </details>
+          </div>
+        </section>
+      </div>
+      <footer>
+        OpsMind · 人工审批保留最终决定权
+        <span>本机演示身份 · 仅限本机使用</span>
+      </footer>
+    </main>
+  </body>
+</html>

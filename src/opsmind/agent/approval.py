@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from opsmind.agent.state import event, expire, observation, snapshot
 from opsmind.core.errors import BusinessError
 from opsmind.db.models import utc_now
+from opsmind.observability.trace import approval_wait
 from opsmind.tools.executor import execute_approved_write
 from opsmind.tools.registry import validate_call
 
@@ -39,12 +40,19 @@ def decide(store: "AgentStore", run_id: str, actor: str, action_id: str, approve
             raise BusinessError(
                 "action_mismatch", "Confirmation does not match the pending action."
             )
+        wait_ms = approval_wait(row.events, action_id)
         if not approved:
             observation(row, action["tool_call_id"], {"ok": False, "error": "user_rejected"})
             row.status = "rejected"
             row.result = "本次待确认操作已拒绝，未执行该操作。"
             event(
-                row, "decision", action_id=action_id, tool=action["tool"], approved=False, ok=False
+                row,
+                "decision",
+                action_id=action_id,
+                tool=action["tool"],
+                approved=False,
+                ok=False,
+                wait_ms=wait_ms,
             )
             row.pending_action = None
             return snapshot(row), False
@@ -68,6 +76,8 @@ def decide(store: "AgentStore", run_id: str, actor: str, action_id: str, approve
             approved=True,
             ok=result["ok"],
             result=result,
+            wait_ms=wait_ms,
+            duration_ms=max(1, round((time.monotonic() - write_started) * 1000)),
         )
         observation(row, action["tool_call_id"], result)
         row.elapsed_ms += max(1, round((time.monotonic() - write_started) * 1000))

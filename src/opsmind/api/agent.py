@@ -53,3 +53,25 @@ async def decide_run(
     runtime: Annotated[AgentRuntime, Depends(get_runtime)],
 ) -> RunRead:
     return await runtime.decide(run_id, actor, data.action_id, data.approved)
+
+
+@router.post("/{run_id}/resume", response_model=RunRead)
+async def resume_run(
+    run_id: RunId,
+    actor: DemoActor,
+    runtime: Annotated[AgentRuntime, Depends(get_runtime)],
+) -> RunRead:
+    """Continue durable work; never grants approval to a pending action."""
+    return await runtime.drive(run_id, actor)
+
+
+@router.get("/{run_id}/trace")
+async def get_trace(
+    run_id: RunId,
+    actor: DemoActor,
+    store: Annotated[AgentStore, Depends(get_store)],
+) -> dict:
+    from opsmind.observability.trace import build_trace
+
+    run = await asyncio.to_thread(store.get, run_id, actor)
+    return build_trace(run)

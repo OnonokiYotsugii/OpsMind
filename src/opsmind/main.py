@@ -1,8 +1,11 @@
 """Local P1 demo app. Importing the module does not connect to MySQL."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import sessionmaker
 
 from opsmind.api.agent import router as agent_router
@@ -33,7 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="OpsMind",
         version="0.1.0",
         lifespan=lifespan,
-        description="P1 local demo: writes use a server-configured employee, without login.",
+        description="Local maintenance Agent demo with human approval; no production login.",
     )
     app.state.settings = settings
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False) if engine else None
@@ -42,6 +45,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         """Liveness only; does not claim database readiness."""
         return {"status": "ok"}
+
+    web = Path(__file__).parent / "web"
+
+    @app.get("/", include_in_schema=False)
+    def workspace() -> FileResponse:
+        return FileResponse(web / "index.html", headers={"Cache-Control": "no-store"})
+
+    app.mount("/assets", StaticFiles(directory=web), name="assets")
 
     install_error_handlers(app)
     app.include_router(router)
