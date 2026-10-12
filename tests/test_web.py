@@ -10,7 +10,13 @@ def test_home_and_assets_without_database_or_model():
         assert page.status_code == 200
         assert "运维工作台" in page.text
         assert page.headers["content-type"].startswith("text/html")
-        for asset in ("app.js", "app.css"):
+        for asset in (
+            "app.js",
+            "app.css",
+            "markdown.js",
+            "vendor/marked.js",
+            "vendor/dompurify.js",
+        ):
             assert client.get(f"/assets/{asset}").status_code == 200
         assert client.get("/assets/.env").status_code == 404
         assert client.get("/assets/%2e%2e/core/config.py").status_code == 404

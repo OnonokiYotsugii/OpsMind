@@ -21,6 +21,8 @@ def sources_from_messages(messages: list[dict]) -> dict:
 def checked_answer(answer: str, messages: list[dict]) -> str:
     sources = sources_from_messages(messages)
     used = set(re.findall(r"\[(KB-[^\]\n]+)\]", answer))
+    # The literal documentation placeholder is not a claimed source identifier.
+    used.discard("KB-...")
     if used - sources.keys() or (sources and not used):
         return (
             "知识库回答未通过来源编号校验，不能作为有依据的诊断。"

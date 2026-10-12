@@ -1,6 +1,7 @@
 """SQL ready state gates visibility of non-transactional vector writes."""
 
 import hashlib
+import re
 from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
@@ -15,6 +16,20 @@ from opsmind.rag.embedding import Embedding, get_embedding
 from opsmind.rag.models import KnowledgeDocument
 from opsmind.rag.schemas import DocumentInfo, SearchArgs
 from opsmind.rag.vector import INDEX_KEY, VectorIndex
+
+
+def exact_alarm_heading(query: str, heading: str) -> bool:
+    """Allow explicit model + alarm matches among vector candidates, not fuzzy guesses."""
+
+    def identifiers(text: str) -> tuple[set[str], set[str]]:
+        text = text.upper()
+        models = set(re.findall(r"(?<![A-Z0-9-])[A-Z][A-Z0-9]*-[A-Z0-9]+(?![A-Z0-9-])", text))
+        alarms = set(re.findall(r"(?<![A-Z0-9])E[0-9]{3,5}(?![A-Z0-9])", text))
+        return models, alarms
+
+    models, alarms = identifiers(query)
+    heading_models, heading_alarms = identifiers(heading)
+    return bool(models and alarms and models <= heading_models and alarms <= heading_alarms)
 
 
 class KnowledgeService:
@@ -133,7 +148,9 @@ class KnowledgeService:
             hits["distances"][0],
             strict=True,
         ):
-            if distance > self.settings.rag_max_distance:
+            if distance > self.settings.rag_max_distance and not exact_alarm_heading(
+                args.query, meta["heading"]
+            ):
                 continue
             items.append(
                 {

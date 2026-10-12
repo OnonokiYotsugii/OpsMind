@@ -81,7 +81,7 @@ function render(run) {
   $("current-id").textContent = run.id;
   $("run-id").value = run.id;
   $("status").textContent = states[run.status] || run.status;
-  $("answer").textContent =
+  const answer =
     run.result ||
     (run.status === "failed"
       ? `本次处理未完成：${run.error_code || "未知错误"}。可查看执行记录。`
@@ -90,6 +90,7 @@ function render(run) {
         : run.status === "running"
           ? "任务尚未结束，可刷新状态或恢复执行。"
           : "已生成操作提议，请核对下方内容。");
+  renderMarkdown($("answer"), answer);
   const action = run.pending_action;
   $("approval").hidden = run.status !== "waiting_confirmation" || !action;
   $("resume").hidden = run.status !== "running";

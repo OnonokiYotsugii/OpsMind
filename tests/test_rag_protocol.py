@@ -80,3 +80,28 @@ def test_non_rag_answer_unchanged():
 
 def test_fabricated_citation_without_search_is_rejected():
     assert "未通过" in checked_answer("参考 [KB-fake]", [])
+
+
+def test_placeholder_in_abstention_is_not_a_fabricated_source():
+    answer = "未检索到资料，没有可引用的 [KB-...] 编号，依据不足。"
+    assert checked_answer(answer, []) == answer
+    assert "未通过" in checked_answer(answer + " 参考 [KB-fake]", [])
+    assert "未通过" in checked_answer(answer, source_messages())
+
+
+@pytest.mark.parametrize(
+    "query, heading, expected",
+    [
+        ("DEMO-24V E102 报警含义 排查", "DEMO-24V：E102 供电报警", True),
+        ("demo-24v e102 报警码", "DEMO-24V：E102 供电报警", True),
+        ("DEMO-24V E102", "DEMO-24V：E205 温度报警", False),
+        ("OTHER-24V E102", "DEMO-24V：E102 供电报警", False),
+        ("DEMO-24V E1020", "DEMO-24V：E102 供电报警", False),
+        ("E102 报警", "DEMO-24V：E102 供电报警", False),
+        ("草莓蛋糕", "DEMO-24V：E102 供电报警", False),
+    ],
+)
+def test_exact_alarm_heading_requires_full_model_and_code(query, heading, expected):
+    from opsmind.rag.service import exact_alarm_heading
+
+    assert exact_alarm_heading(query, heading) is expected

@@ -414,3 +414,109 @@
     }
   }
 }
+
+@layer components {
+  .answer {
+    white-space: normal;
+    line-height: 1.8;
+    max-width: 75ch;
+  }
+  .answer.plain-answer {
+    white-space: pre-wrap;
+  }
+  .answer > :first-child {
+    margin-top: 0;
+  }
+  .answer h1,
+  .answer h2,
+  .answer h3,
+  .answer h4,
+  .answer h5,
+  .answer h6 {
+    margin: 1.65em 0 0.65em;
+    font-weight: 700;
+  }
+  .answer h1 {
+    font-size: 1.45rem;
+  }
+  .answer h2 {
+    font-size: 1.25rem;
+  }
+  .answer h3 {
+    font-size: 1.1rem;
+  }
+  .answer h4,
+  .answer h5,
+  .answer h6 {
+    font-size: 1rem;
+  }
+  .answer p {
+    margin: 0.8em 0;
+  }
+  .answer ul,
+  .answer ol {
+    padding-left: 1.5em;
+    margin: 0.8em 0;
+  }
+  .answer li {
+    margin: 0.4em 0;
+  }
+  .answer li > p {
+    margin: 0.3em 0;
+  }
+  .answer blockquote {
+    margin: 1em 0;
+    padding: 0.25em 1em;
+    background: var(--soft);
+    border-radius: 6px;
+  }
+  .answer code {
+    font-size: 0.88em;
+    background: var(--bg);
+    padding: 0.12em 0.3em;
+    border-radius: 3px;
+  }
+  .answer pre {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    line-height: 1.65;
+  }
+  .answer pre code {
+    padding: 0;
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+  .answer hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 1.5em 0;
+  }
+  .answer-table {
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 1em 0;
+  }
+  .answer table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.88rem;
+  }
+  .answer th,
+  .answer td {
+    text-align: left;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    min-width: 100px;
+  }
+  .answer th {
+    background: var(--bg);
+    font-weight: 600;
+  }
+  .answer a {
+    overflow-wrap: anywhere;
+  }
+}

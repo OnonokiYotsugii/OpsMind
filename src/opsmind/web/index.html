@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpsMind · 运维工作台</title>
     <link rel="stylesheet" href="/assets/app.css" />
+    <script src="/assets/vendor/marked.js" defer></script>
+    <script src="/assets/vendor/dompurify.js" defer></script>
+    <script src="/assets/markdown.js" defer></script>
     <script src="/assets/app.js" defer></script>
   </head>
   <body>
@@ -102,7 +105,7 @@
           </div>
           <div id="run" hidden>
             <p class="run-label">运行编号 <code id="current-id"></code></p>
-            <p id="answer" class="answer"></p>
+            <div id="answer" class="answer"></div>
             <div id="approval" hidden>
               <h3>待确认的工单操作</h3>
               <p>请核对下方内容。确认后将实际写入数据库。</p>

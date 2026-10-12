@@ -116,6 +116,9 @@ def test_real_multilingual_retrieval(service, request):
     hits = service.search(SearchArgs(query="DEMO-24V E102 供电电压异常"))["items"]
     assert hits and "E102" in hits[0]["text"]
     assert not service.search(SearchArgs(query="如何制作草莓蛋糕"))["items"]
+    for query in ("DEMO-24V E102 报警含义 排查", "DEMO-24V E102 报警码"):
+        hits = service.search(SearchArgs(query=query))["items"]
+        assert hits and all("E102" in h["heading"] for h in hits)
 
 
 def test_agent_search_and_citations(service, tmp_path):
