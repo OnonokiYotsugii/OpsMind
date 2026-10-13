@@ -1,5 +1,7 @@
 # 架构设计
 
+面向初学者的完整说明见 [项目全景指南](项目全景指南.md)。当前采用本地运行，Docker 实跑按学习目标暂停。
+
 ## P7 当前实现
 
 已实现配置、日志、FastAPI 工厂、业务服务、输入/输出模型、SQLAlchemy 数据访问与 MySQL 迁移。Settings 实例化时读取环境，导入模块无数据库连接副作用。保留本机演示限制，新增 P2 单次模型分析接口；已接入 RAG，并用 LangGraph 节点与 MySQL 检查点替换手写循环。
@@ -65,7 +67,7 @@ ToolClient 调用模型，AgentStore 在短事务中执行只读工具或保存�
 Runtime 作为创建、确认、恢复入口；graph.py 连接 sync/model/tools/approval/finalize 节点。
 MySQLSaver 保存图检查点与 pending writes，AgentStore 保持业务消息、预算和审批凭据的权威性。
 节点可能重放，effect_id 和事务凭据防止重复应用。420 秒运行租约与拥有者令牌防止并发及失效执行者写入。
-详见 ADR 0006 和 p5-guide.md。后续 Evaluation 与 Observability 尚未实现。
+详见 ADR 0006 和 p5-guide.md。Evaluation 与 Observability 已在 P6 实现，见下节。
 
 ## P6 评测和 Trace
 

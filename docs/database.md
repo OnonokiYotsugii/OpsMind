@@ -1,8 +1,8 @@
 # 第一版数据库设计（P1 已实现）
 
-P1 使用 MySQL 8 / InnoDB / utf8mb4，由 Alembic 0001 创建 equipment、employee、maintenance_record、ticket。KnowledgeDocument 仍为 P4 规划。
+P1 使用 MySQL 8 / InnoDB / utf8mb4，由 Alembic 0001 创建 equipment、employee、maintenance_record、ticket。后续 P3–P5 已增加 Agent、知识文档与检查点表，见下文。
 
-统一约定：主键为 BIGINT 自增；时间为 DATETIME(6)，应用统一写入 UTC，展示时转换时区；created_at 由应用默认写入创建时间，updated_at 在更新时由持久化代码维护；直接 SQL 写入需显式提供这些时间。必填字段默认 NOT NULL，下面标明的字段可空。状态采用 VARCHAR 加 CHECK 约束，应用同步校验；取值在 ORM CHECK 约束及请求模型中固定，代码类与迁移文件分别维护，并通过 alembic check 验证结构。
+P1 业务表约定：主键为 BIGINT 自增；时间为 DATETIME(6)，应用统一写入 UTC，展示时转换时区；created_at 由应用默认写入创建时间，updated_at 在更新时由持久化代码维护；直接 SQL 写入需显式提供这些时间。必填字段默认 NOT NULL，下面标明的字段可空。状态采用 VARCHAR 加 CHECK 约束，应用同步校验；取值在 ORM CHECK 约束及请求模型中固定，代码类与迁移文件分别维护，并通过 alembic check 验证结构。
 
 ## equipment
 
@@ -30,11 +30,11 @@ id；ticket_no VARCHAR(64) UNIQUE；equipment_id BIGINT 外键；title VARCHAR(2
 
 索引：(equipment_id, created_at, id)。工单编号由程序生成并通过唯一约束防重，不能使用“查询数量加一”。避免以同名员工字符串作为关联键。
 
-## knowledge_document（P4 实现）
+## knowledge_document（P4 实现，迁移 0003）
 
-id；title VARCHAR(255)；document_type VARCHAR(32)；source VARCHAR(512)；version VARCHAR(64)；created_at。
+id VARCHAR(32) 主键；title VARCHAR(200)；document_type VARCHAR(32)；source VARCHAR(200)；version VARCHAR(32)；content_hash VARCHAR(64)；index_key VARCHAR(64)；status VARCHAR(16)；chunk_count INTEGER；created_at。
 
-只规划元数据。原文存储位置、文档去重、chunk ID、embedding 模型版本和向量关联在 P4 根据实际导入方案确定。
+(source, version) 唯一约束。保存来源、内容哈希、索引版本和 indexing/ready 状态等元数据；片段正文、向量和关联信息保存在本机 Chroma。导入完成才标记 ready，查询仅选择兼容索引且 ready 的文档。同源同版本变更内容会拒绝，需新版本或对相同内容显式重建索引。
 
 ## 关系与删除
 
